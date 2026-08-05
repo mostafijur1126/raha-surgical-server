@@ -125,7 +125,7 @@ app.get("/featured-products", async (req, res) => {
   }
 });
 
-//order product
+//add order product
 app.post("/order-product", async (req, res) => {
   try {
     const paylod = {
@@ -151,4 +151,19 @@ app.post("/order-product", async (req, res) => {
   }
 });
 
+//get all ordered products
+app.get("/ordered-product", async (req, res) => {
+  try {
+    const result = await ordersCollection.find().toArray();
+    res.send({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: "Faild to fetch orderd products",
+    });
+  }
+});
 export default app;
