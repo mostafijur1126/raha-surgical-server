@@ -90,6 +90,29 @@ app.get("/products/:id", async (req, res) => {
     });
   }
 });
+
+//Update Product
+app.patch("/update-product/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedData = req.body;
+
+    const result = await productsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedData },
+    );
+    res.send({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: "Failed to edit products",
+    });
+  }
+});
+
 //get all categories
 app.get("/categories", async (req, res) => {
   try {
