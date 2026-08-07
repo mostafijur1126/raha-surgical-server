@@ -128,6 +128,43 @@ app.get("/categories", async (req, res) => {
     });
   }
 });
+
+//Popular categories with sample images
+app.get("/api/categories/popular", async (req, res) => {
+  try {
+    const pipeline = [
+      {
+        $group: {
+          _id: "$category",
+          count: { $sum: 1 },
+          imageUrl: { $first: { $arrayElemAt: ["$imageUrls", 0] } },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 8 },
+    ];
+
+    const result = await productsCollection.aggregate(pipeline).toArray();
+
+    const categories = result.map((item) => ({
+      category: item._id,
+      imageUrl: item.imageUrl || null,
+      productCount: item.count,
+    }));
+
+    res.send({
+      success: true,
+      data: categories,
+    });
+  } catch (error) {
+    console.error("Error fetching popular categories:", error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch popular categories",
+    });
+  }
+});
+
 //get featured products
 app.get("/featured-products", async (req, res) => {
   try {
@@ -177,21 +214,42 @@ app.post("/order-product", async (req, res) => {
 //get all ordered products
 app.get("/ordered-product", async (req, res) => {
   try {
-    const { search = "", status = "", page = 1, limit = 10 } = req.query;
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const limitNum = parseInt(limit);
+    const status = typeof req.query.status === "string" ? req.query.status : "";
 
-    //filter object
-    const filter: any = {};
-    //status filter
+    const pageParam = typeof req.query.page === "string" ? req.query.page : "1";
+
+    const limitParam =
+      typeof req.query.limit === "string" ? req.query.limit : "10";
+
+    const page = Math.max(Number.parseInt(pageParam, 10) || 1, 1);
+    const limit = Math.min(
+      Math.max(Number.parseInt(limitParam, 10) || 10, 1),
+      100,
+    );
+
+    const skip = (page - 1) * limit;
+
+    // Filter
+    const filter: {
+      status?: string;
+      $or?: Array<Record<string, RegExp>>;
+    } = {};
+
+    // Status filter
     if (status && status !== "all") {
       filter.status = status;
     }
 
-    //Search filter (search in order ID, customer name, facility, etc.)
+    // Search filter
     if (search) {
-      const searchRegex = new RegExp(search, "i");
+      const searchRegex = new RegExp(
+        search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i",
+      );
+
       filter.$or = [
         { "customer.fullName": searchRegex },
         { "customer.phone": searchRegex },
@@ -199,33 +257,43 @@ app.get("/ordered-product", async (req, res) => {
         { "product.name": searchRegex },
       ];
     }
-    // Get total count for pagination
+
+    // Total count
     const total = await ordersCollection.countDocuments(filter);
-    const totalPage = Math.ceil(total / limitNum);
 
-    // Fetch orders with pagination and sorting (latest first)
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
 
+    // Orders
     const result = await ordersCollection
       .find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limitNum)
+      .limit(limit)
       .toArray();
-    res.send({
+
+    return res.status(200).json({
       success: true,
       data: result,
       pagination: {
         total,
-        totalPages: totalPage,
-        currentPage: parseInt(page),
-        limit: limitNum,
+        totalPages,
+        currentPage: page,
+        limit,
       },
     });
   } catch (error) {
     console.error("Error fetching orders:", error);
-    res.status(500).send({
+
+    return res.status(500).json({
       success: false,
-      message: "Faild to fetch orderds",
+      data: [],
+      message: "Failed to fetch orders",
+      pagination: {
+        total: 0,
+        totalPages: 1,
+        currentPage: 1,
+        limit: 10,
+      },
     });
   }
 });
